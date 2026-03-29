@@ -1,0 +1,12 @@
+{
+  "name": "mosses-project-hub",
+  "version": "1.0.0",
+  "description": "Mosses Complete Project Hub — Online 24/7 on Cloudflare Workers",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "author": "Mosses (bowbozaa)",
+  "license": "MIT"
+}

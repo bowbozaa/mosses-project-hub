@@ -1,0 +1,6 @@
+name = "mosses-project-hub"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+VERSION = "1.0.0"
