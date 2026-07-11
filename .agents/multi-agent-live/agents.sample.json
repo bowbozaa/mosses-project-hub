@@ -1,0 +1,22 @@
+{
+  "agents": [
+    {
+      "name": "local-date",
+      "kind": "command",
+      "role": "Local command adapter that reports current date/time only",
+      "options": {
+        "command": "Get-Date"
+      }
+    },
+    {
+      "name": "mesh-monitor-status",
+      "kind": "mesh-action",
+      "role": "FRIDAY Agent Mesh read-only monitor status action",
+      "options": {
+        "url": "https://friday-agent-mesh.banknakorn39.workers.dev",
+        "action": "monitor_status",
+        "params": {}
+      }
+    }
+  ]
+}
