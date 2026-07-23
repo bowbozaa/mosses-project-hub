@@ -1,0 +1,21 @@
+name = "claw-guardian"
+main = "src/index.ts"
+compatibility_date = "2026-07-16"
+compatibility_flags = ["nodejs_compat"]
+account_id = "c8a673351898eed482ae6f410e4aa118"
+
+[vars]
+AGENT_NAME = "Guardian Agent"
+AGENT_SKILL_ID = "guardian_policy_check"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "friclawd-db"
+database_id = "d2e8c736-1a8b-47d9-9d65-6142a3e15556"
+migrations_dir = "migrations"
+
+# secrets (ตั้งด้วย wrangler secret put — ห้ามใส่ในไฟล์นี้)
+# ⚠️ Windows: ใช้ git-bash `printf '%s' "$VAL" | wrangler secret put NAME` กัน trailing newline → 401 ปลอม
+# wrangler secret put A2A_SHARED_KEY
+# wrangler secret put FRICLAWD_LINE_TOKEN
+# wrangler secret put GUARDIAN_APPROVER_UID
