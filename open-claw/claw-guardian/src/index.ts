@@ -9,8 +9,8 @@
 //                      POST /health, POST /tasks/get, POST /approvals/resolve
 //     (claw-brain เรียกผ่าน Service Binding ด้วย message/send และ n8n ยิง /approvals/resolve)
 //   - fail-closed:     ไม่เจอ policy → MANUAL_REVIEW (live เดิม fail-open เป็น PASS)
-//   - GUARDIAN_APPROVER_UID เป็น optional-strict: ตั้ง secret เมื่อไหร่ resolve ต้องส่ง
-//     requester_uid ตรงเท่านั้น; ไม่ตั้ง = พฤติกรรม live เดิม (n8n ไม่ส่ง uid ก็ resolve ได้)
+//   - UID check เป็น opt-in: ตั้ง GUARDIAN_REQUIRE_UID="1" เมื่อไหร่ resolve ต้องส่ง
+//     requester_uid ตรง GUARDIAN_APPROVER_UID; ไม่ตั้ง = พฤติกรรม live เดิม
 
 import {
   A2A_VERSION_HEADER,
@@ -43,6 +43,7 @@ export interface Env {
   TG_BOT_TOKEN: string;
   TG_CHAT_ID: string;
   GUARDIAN_APPROVER_UID?: string;
+  GUARDIAN_REQUIRE_UID?: string; // "1" = บังคับตรวจ requester_uid ตอน resolve
 }
 
 const PROTOCOL_VERSION = "1.0";
@@ -658,10 +659,12 @@ export default {
 
       const { approval_id, status, requester_uid, reason } = body;
 
-      // optional-strict: ตั้ง GUARDIAN_APPROVER_UID เมื่อไหร่ requester_uid ต้องตรง
-      // ไม่ตั้ง = พฤติกรรม live เดิม (n8n resolve ได้ด้วย shared key อย่างเดียว)
+      // opt-in strict: เปิด GUARDIAN_REQUIRE_UID="1" เมื่อไหร่ requester_uid ต้องตรง
+      // GUARDIAN_APPROVER_UID. ค่า default = พฤติกรรม live เดิม (shared key อย่างเดียว)
+      // — เหตุผล: secret GUARDIAN_APPROVER_UID บน worker เป็น LINE UID ยุคเก่า
+      // แต่ flow ปัจจุบันคือ Telegram/n8n ที่ไม่ได้ส่ง requester_uid
       if (
-        env.GUARDIAN_APPROVER_UID &&
+        env.GUARDIAN_REQUIRE_UID === "1" &&
         requester_uid !== env.GUARDIAN_APPROVER_UID
       ) {
         return Response.json(

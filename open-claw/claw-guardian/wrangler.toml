@@ -18,5 +18,5 @@ migrations_dir = "migrations"
 # ⚠️ Windows: ใช้ git-bash `printf '%s' "$VAL" | wrangler secret put NAME` กัน trailing newline → 401 ปลอม
 # wrangler secret put A2A_SHARED_KEY
 # wrangler secret put TG_BOT_TOKEN
-# wrangler secret put TG_CHAT_ID
-# wrangler secret put GUARDIAN_APPROVER_UID   # optional — ตั้งเมื่อไหร่ resolve ต้องส่ง requester_uid ตรง
+# wrangler secret put TG_CHAT_ID              # เก็บเป็น secret (repo เป็น public — ห้ามใส่ [vars])
+# wrangler secret put GUARDIAN_APPROVER_UID   # ใช้คู่กับ GUARDIAN_REQUIRE_UID="1" (opt-in strict resolve)

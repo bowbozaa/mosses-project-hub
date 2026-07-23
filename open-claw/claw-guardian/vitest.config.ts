@@ -16,6 +16,7 @@ export default defineConfig(async () => ({
           TG_BOT_TOKEN: "test-tg-token",
           TG_CHAT_ID: "-100999",
           GUARDIAN_APPROVER_UID: "U_test_approver",
+          GUARDIAN_REQUIRE_UID: "1", // เทสต์ strict path (prod default = ปิด)
         },
         // ดัก outbound ทั้งหมดให้เทสต์ hermetic:
         // - Telegram push → 200 ปกติ, ถ้า body มี __fail_push__ → 500 (จำลอง fail-closed)
