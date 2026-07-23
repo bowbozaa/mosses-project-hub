@@ -44,6 +44,7 @@ export interface Env {
   TG_CHAT_ID: string;
   GUARDIAN_APPROVER_UID?: string;
   GUARDIAN_REQUIRE_UID?: string; // "1" = บังคับตรวจ requester_uid ตอน resolve
+  JARVIS_FORWARD_URL?: string; // n8n JARVIS webhook — forward ข้อความที่ไม่ใช่ approve/reject
 }
 
 const PROTOCOL_VERSION = "1.0";
@@ -775,6 +776,23 @@ export default {
 
       const m = text.match(/^(approve|reject)\s+(appr_[A-Za-z0-9]+)/i);
       if (!m) {
+        // ไม่ใช่คำสั่ง approve/reject → ส่งต่อให้ JARVIS (n8n) จัดการ
+        // (guardian เป็นเจ้าของ webhook เดียวของ bot — กัน n8n WF แย่ง webhook กันเอง)
+        if (env.JARVIS_FORWARD_URL) {
+          try {
+            await fetch(env.JARVIS_FORWARD_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(update),
+            });
+            return Response.json(
+              { ok: true, forwarded: true },
+              { headers: CORS },
+            );
+          } catch (_) {
+            // forward ล้ม → ตอบ 200 กัน Telegram retry ถล่ม
+          }
+        }
         return Response.json(
           { ok: true, ignored: "no command" },
           { headers: CORS },

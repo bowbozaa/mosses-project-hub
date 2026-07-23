@@ -380,7 +380,8 @@ describe("telegram webhook (HITL listener)", () => {
       headers: { "Content-Type": "application/json", ...TG_SECRET },
       body: tgUpdate("สวัสดีตอนเช้า"),
     });
-    expect(((await chatter.json()) as any).ignored).toBe("no command");
+    // non-command จากแชทผู้อนุมัติ → forward ให้ JARVIS (mock n8n.test)
+    expect(((await chatter.json()) as any).forwarded).toBe(true);
   });
 
   it("resolves a pending approval from a telegram reply", async () => {

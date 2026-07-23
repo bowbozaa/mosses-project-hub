@@ -17,6 +17,7 @@ export default defineConfig(async () => ({
           TG_CHAT_ID: "-100999",
           GUARDIAN_APPROVER_UID: "U_test_approver",
           GUARDIAN_REQUIRE_UID: "1", // เทสต์ strict path (prod default = ปิด)
+          JARVIS_FORWARD_URL: "https://n8n.test/webhook/jarvis-cmd",
         },
         // ดัก outbound ทั้งหมดให้เทสต์ hermetic:
         // - Telegram push → 200 ปกติ, ถ้า body มี __fail_push__ → 500 (จำลอง fail-closed)
@@ -28,6 +29,9 @@ export default defineConfig(async () => ({
             return body.includes("__fail_push__")
               ? new Response("mock telegram error", { status: 500 })
               : Response.json({ ok: true });
+          }
+          if (url.hostname === "n8n.test") {
+            return Response.json({ ok: true });
           }
           return new Response("outbound blocked in tests: " + url.hostname, {
             status: 502,

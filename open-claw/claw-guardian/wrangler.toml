@@ -20,3 +20,4 @@ migrations_dir = "migrations"
 # wrangler secret put TG_BOT_TOKEN
 # wrangler secret put TG_CHAT_ID              # เก็บเป็น secret (repo เป็น public — ห้ามใส่ [vars])
 # wrangler secret put GUARDIAN_APPROVER_UID   # ใช้คู่กับ GUARDIAN_REQUIRE_UID="1" (opt-in strict resolve)
+# wrangler secret put JARVIS_FORWARD_URL      # n8n JARVIS webhook — guardian forward ข้อความ non-approve ให้
