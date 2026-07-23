@@ -1,0 +1,15 @@
+# config สำหรับ vitest เท่านั้น — เหมือน wrangler.toml แต่ไม่มี [ai] binding
+name = "claw-creative"
+main = "src/index.ts"
+compatibility_date = "2026-07-16"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+AGENT_NAME = "Creative Agent"
+AGENT_SKILL_ID = "creative_generate"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "friclawd-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
