@@ -1,0 +1,16 @@
+# config สำหรับ vitest เท่านั้น — เหมือน wrangler.toml แต่ไม่มี [ai] binding
+# (Workers AI ใช้ remote proxy ซึ่งเทสต์ local ไม่ควรแตะ — โค้ดกัน env.AI undefined ไว้แล้ว)
+name = "claw-marketing"
+main = "src/index.ts"
+compatibility_date = "2026-07-16"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+AGENT_NAME = "Marketing Agent"
+AGENT_SKILL_ID = "marketing_content_gen"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "friclawd-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

@@ -1,0 +1,25 @@
+name = "claw-marketing"
+main = "src/index.ts"
+compatibility_date = "2026-07-16"
+compatibility_flags = ["nodejs_compat"]
+account_id = "c8a673351898eed482ae6f410e4aa118"
+
+[vars]
+AGENT_NAME = "Marketing Agent"
+AGENT_SKILL_ID = "marketing_content_gen"
+
+[ai]
+binding = "AI"
+
+# DB เพิ่มใหม่ใน v2 สำหรับ D1TaskStore (a2a_tasks) — logTask ยังลง console ตาม live
+[[d1_databases]]
+binding = "DB"
+database_name = "friclawd-db"
+database_id = "d2e8c736-1a8b-47d9-9d65-6142a3e15556"
+migrations_dir = "migrations"
+
+# ⚠️ migrations เป็นชุดเดียวกับ claw-guardian (แชร์ friclawd-db) — apply remote จากโปรเจกต์
+# guardian เท่านั้น (dir นี้มีไว้ให้ vitest สร้างตาราง local เท่านั้น)
+
+# secrets ที่มีบน live (คงอยู่ข้าม deploy — ห้ามใส่ค่าในไฟล์นี้):
+# A2A_SHARED_KEY / GUARDIAN_URL / GUARDIAN_A2A_KEY / LINE_CHANNEL_TOKEN
