@@ -1,0 +1,45 @@
+name = "claw-brain"
+main = "src/index.ts"
+compatibility_date = "2026-07-16"
+compatibility_flags = ["nodejs_compat"]
+account_id = "c8a673351898eed482ae6f410e4aa118"
+
+[vars]
+AGENT_NAME = "CLAW BRAIN"
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "friclawd-db"
+database_id = "d2e8c736-1a8b-47d9-9d65-6142a3e15556"
+migrations_dir = "migrations"
+
+# Service Bindings → specialist ทั้ง 5 (กัน same-zone loopback 404)
+[[services]]
+binding = "GUARDIAN"
+service = "claw-guardian"
+
+[[services]]
+binding = "DEVOPS"
+service = "claw-devops"
+
+[[services]]
+binding = "DATA"
+service = "claw-data"
+
+[[services]]
+binding = "MARKETING"
+service = "claw-marketing"
+
+[[services]]
+binding = "CREATIVE"
+service = "claw-creative"
+
+# ⚠️ migrations เป็นชุดเดียวกับ claw-guardian (แชร์ friclawd-db) — apply remote จากโปรเจกต์
+# guardian เท่านั้น (dir นี้มีไว้ให้ vitest สร้างตาราง local เท่านั้น)
+
+# secrets (คงอยู่ข้าม deploy — ห้ามใส่ค่าในไฟล์นี้):
+# BRAIN_API_KEY   — auth ของ /run /dispatch /pipeline (legacy)
+# A2A_SHARED_KEY  — key ขาออกไป specialist + auth ขาเข้า /a2a/jsonrpc (fleet key เดียวกัน)

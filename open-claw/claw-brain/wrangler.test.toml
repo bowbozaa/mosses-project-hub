@@ -1,0 +1,15 @@
+# config สำหรับ vitest เท่านั้น — ไม่มี [ai] และไม่มี [[services]]
+# (specialist ถูก mock ผ่าน miniflare serviceBindings ใน vitest.config.ts)
+name = "claw-brain"
+main = "src/index.ts"
+compatibility_date = "2026-07-16"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+AGENT_NAME = "CLAW BRAIN"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "friclawd-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
