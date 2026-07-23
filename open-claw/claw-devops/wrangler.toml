@@ -1,0 +1,22 @@
+name = "claw-devops"
+main = "src/index.ts"
+compatibility_date = "2026-07-16"
+compatibility_flags = ["nodejs_compat"]
+account_id = "c8a673351898eed482ae6f410e4aa118"
+
+[vars]
+AGENT_NAME = "DevOps Agent"
+AGENT_SKILL_ID = "devops_ops_check"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "friclawd-db"
+database_id = "d2e8c736-1a8b-47d9-9d65-6142a3e15556"
+migrations_dir = "migrations"
+
+# ⚠️ migrations เป็นชุดเดียวกับ claw-guardian (แชร์ friclawd-db) — apply remote จากโปรเจกต์
+# guardian เท่านั้น ห้าม apply ซ้ำจากที่นี่ (dir นี้มีไว้ให้ vitest สร้างตาราง local เท่านั้น)
+
+# secrets ที่มีบน live (คงอยู่ข้าม deploy — ห้ามใส่ค่าในไฟล์นี้):
+# A2A_SHARED_KEY — key สำหรับ caller ยืนยัน
+# CF_API_TOKEN / CF_ACCOUNT_ID / GUARDIAN_URL / GUARDIAN_A2A_KEY — สำรองไว้สำหรับสาย devops_deploy ในอนาคต (โค้ดปัจจุบันยังไม่ใช้)
