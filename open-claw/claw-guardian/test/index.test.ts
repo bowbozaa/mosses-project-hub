@@ -344,3 +344,91 @@ describe("legacy message/send + approval lifecycle", () => {
     expect(body.error.code).toBe(-32001);
   });
 });
+
+describe("telegram webhook (HITL listener)", () => {
+  const TG_SECRET = { "X-Telegram-Bot-Api-Secret-Token": "test-shared-key" };
+
+  function tgUpdate(text: string, chatId: string | number = "-100999") {
+    return JSON.stringify({
+      update_id: 1,
+      message: { chat: { id: chatId }, text },
+    });
+  }
+
+  it("rejects updates without the webhook secret token", async () => {
+    const res = await SELF.fetch("https://guardian.test/telegram/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: tgUpdate("approve appr_x"),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("ignores messages from other chats and non-commands", async () => {
+    const wrongChat = await SELF.fetch(
+      "https://guardian.test/telegram/webhook",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...TG_SECRET },
+        body: tgUpdate("approve appr_x", "999123"),
+      },
+    );
+    expect(((await wrongChat.json()) as any).ignored).toBe("wrong chat");
+
+    const chatter = await SELF.fetch("https://guardian.test/telegram/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...TG_SECRET },
+      body: tgUpdate("สวัสดีตอนเช้า"),
+    });
+    expect(((await chatter.json()) as any).ignored).toBe("no command");
+  });
+
+  it("resolves a pending approval from a telegram reply", async () => {
+    // สร้าง pending ผ่าน legacy path (Telegram push ถูก mock ใน outboundService)
+    const pending = await legacySend({
+      action: "deploy webhook test",
+      requested_by: "vitest",
+    });
+    const approvalId = pending.approval_id as string;
+
+    const res = await SELF.fetch("https://guardian.test/telegram/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...TG_SECRET },
+      body: tgUpdate(`approve ${approvalId}`),
+    });
+    const body: any = await res.json();
+    expect(body.resolved).toBe(true);
+    expect(body.status).toBe("approved");
+
+    // ตอบซ้ำ → resolved:false (conditional update)
+    const twice = await SELF.fetch("https://guardian.test/telegram/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...TG_SECRET },
+      body: tgUpdate(`reject ${approvalId}`),
+    });
+    expect(((await twice.json()) as any).resolved).toBe(false);
+
+    // สถานะกลายเป็น completed
+    const poll = await SELF.fetch("https://guardian.test/tasks/get", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approval_id: approvalId }),
+    });
+    expect(((await poll.json()) as any).state).toBe("completed");
+  });
+
+  it("registers the webhook via /telegram/setup (auth required)", async () => {
+    const noKey = await SELF.fetch("https://guardian.test/telegram/setup", {
+      method: "POST",
+    });
+    expect(noKey.status).toBe(401);
+
+    const res = await SELF.fetch("https://guardian.test/telegram/setup", {
+      method: "POST",
+      headers: { "x-a2a-key": "test-shared-key" },
+    });
+    const body: any = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.webhook).toBe("https://guardian.test/telegram/webhook");
+  });
+});

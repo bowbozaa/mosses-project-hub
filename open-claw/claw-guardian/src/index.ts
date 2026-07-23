@@ -345,6 +345,51 @@ export async function runGuardianSkill(
   };
 }
 
+// ── resolve approval (ใช้ร่วม /approvals/resolve และ /telegram/webhook) ──
+async function resolveApproval(
+  env: Env,
+  approvalId: string,
+  status: "approved" | "rejected",
+  reason?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  // conditional update กัน resolve ซ้ำ (atomic — ไม่มีช่อง race ระหว่าง SELECT กับ UPDATE)
+  const updated = await env.DB.prepare(
+    "UPDATE pending_approvals SET status = ? WHERE id = ? AND status = 'pending'",
+  )
+    .bind(status, approvalId)
+    .run();
+  if (!updated.meta.changes) {
+    return { ok: false, error: "approval not found or already resolved" };
+  }
+
+  await logTask(
+    env,
+    "guardian_resolve",
+    { approval_id: approvalId, status, reason },
+    true,
+  );
+
+  // แจ้งผลกลับเข้า Telegram (best-effort — ล้มไม่ทำให้ resolve fail)
+  try {
+    const emoji = status === "approved" ? "✅" : "❌";
+    await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: env.TG_CHAT_ID,
+        text: `${emoji} *${status.toUpperCase()}* \`${approvalId}\`${
+          reason ? `\nเหตุผล: ${reason}` : ""
+        }`,
+        parse_mode: "Markdown",
+      }),
+    });
+  } catch (_) {
+    // notify ล้มไม่กระทบผล resolve
+  }
+
+  return { ok: true };
+}
+
 // ── A2A v1 executor ──
 class GuardianExecutor implements AgentExecutor {
   private readonly canceledTasks = new Set<string>();
@@ -679,50 +724,114 @@ export default {
         );
       }
 
-      // conditional update กัน resolve ซ้ำ (atomic — ไม่มีช่อง race ระหว่าง SELECT กับ UPDATE)
-      const updated = await env.DB.prepare(
-        "UPDATE pending_approvals SET status = ? WHERE id = ? AND status = 'pending'",
-      )
-        .bind(status, approval_id)
-        .run();
-
-      if (!updated.meta.changes) {
+      const resolved = await resolveApproval(
+        env,
+        String(approval_id ?? ""),
+        status,
+        reason,
+      );
+      if (!resolved.ok) {
         return Response.json(
-          { ok: false, error: "approval not found or already resolved" },
+          { ok: false, error: resolved.error },
           { headers: CORS },
         );
       }
 
-      await logTask(
-        env,
-        "guardian_resolve",
-        { approval_id, status, reason },
-        true,
-      );
-
-      // แจ้งผลกลับเข้า Telegram (best-effort — ล้มไม่ทำให้ resolve fail)
-      try {
-        const emoji = status === "approved" ? "✅" : "❌";
-        await fetch(
-          `https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              chat_id: env.TG_CHAT_ID,
-              text: `${emoji} *${String(status).toUpperCase()}* \`${approval_id}\`${
-                reason ? `\nเหตุผล: ${reason}` : ""
-              }`,
-              parse_mode: "Markdown",
-            }),
-          },
-        );
-      } catch (_) {
-        // notify ล้มไม่กระทบผล resolve
-      }
-
       return Response.json(
         { ok: true, approval_id, status },
+        { headers: CORS },
+      );
+    }
+
+    // ── /telegram/webhook — Telegram ส่งคำตอบ approve/reject ตรงเข้า worker ──
+    // (ปิดวง HITL โดยไม่ต้องพึ่ง n8n — เดิม listener มีแต่ฝั่ง LINE)
+    if (req.method === "POST" && url.pathname === "/telegram/webhook") {
+      // Telegram แนบ secret token ที่ตั้งตอน setWebhook มาใน header นี้เสมอ
+      if (
+        !env.A2A_SHARED_KEY ||
+        req.headers.get("X-Telegram-Bot-Api-Secret-Token") !==
+          env.A2A_SHARED_KEY
+      ) {
+        return Response.json({ ok: false }, { status: 401, headers: CORS });
+      }
+
+      let update: any;
+      try {
+        update = await req.json();
+      } catch {
+        return Response.json({ ok: false }, { status: 400, headers: CORS });
+      }
+
+      const msg = update?.message;
+      const text = String(msg?.text ?? "").trim();
+
+      // รับเฉพาะแชทของผู้อนุมัติ (TG_CHAT_ID) เท่านั้น — ตอบ 200 เสมอกัน Telegram retry
+      if (String(msg?.chat?.id ?? "") !== String(env.TG_CHAT_ID)) {
+        return Response.json(
+          { ok: true, ignored: "wrong chat" },
+          { headers: CORS },
+        );
+      }
+
+      const m = text.match(/^(approve|reject)\s+(appr_[A-Za-z0-9]+)/i);
+      if (!m) {
+        return Response.json(
+          { ok: true, ignored: "no command" },
+          { headers: CORS },
+        );
+      }
+
+      const status = m[1].toLowerCase() === "approve" ? "approved" : "rejected";
+      const resolved = await resolveApproval(env, m[2], status);
+      if (!resolved.ok) {
+        // แจ้งกลับว่า resolve ไม่สำเร็จ (เช่น ตอบซ้ำ/ไม่พบ) — best-effort
+        try {
+          await fetch(
+            `https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: env.TG_CHAT_ID,
+                text: `⚠️ ${m[2]}: ${resolved.error}`,
+              }),
+            },
+          );
+        } catch (_) {}
+      }
+      return Response.json(
+        { ok: true, approval_id: m[2], status, resolved: resolved.ok },
+        { headers: CORS },
+      );
+    }
+
+    // ── /telegram/setup — สั่ง setWebhook จากใน worker (token ไม่ออกจาก secret) ──
+    if (req.method === "POST" && url.pathname === "/telegram/setup") {
+      if (
+        !env.A2A_SHARED_KEY ||
+        req.headers.get("x-a2a-key") !== env.A2A_SHARED_KEY
+      ) {
+        return Response.json(
+          { ok: false, error: "unauthorized" },
+          { status: 401, headers: CORS },
+        );
+      }
+      const webhookUrl = `${origin}/telegram/webhook`;
+      const res = await fetch(
+        `https://api.telegram.org/bot${env.TG_BOT_TOKEN}/setWebhook`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: webhookUrl,
+            secret_token: env.A2A_SHARED_KEY,
+            allowed_updates: ["message"],
+          }),
+        },
+      );
+      const tg = await res.json();
+      return Response.json(
+        { ok: res.ok, webhook: webhookUrl, telegram: tg },
         { headers: CORS },
       );
     }
