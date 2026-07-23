@@ -1,13 +1,16 @@
 // claw-guardian — Open Claw A2A Guardian Agent (A2A v1.0)
-// HITL gate: ตรวจ policy + ขอ approve ผ่าน LINE ก่อนงาน irreversible
+// HITL gate: ตรวจ policy + ขอ approve ผ่าน Telegram ก่อนงาน irreversible
 //
-// v2.0.0 — migrate ขึ้น A2A v1.0 ด้วย official @a2a-js/sdk:
+// v2.0.0 — migrate ขึ้น A2A v1.0 ด้วย official @a2a-js/sdk
+// (reconcile กับโค้ด live ที่ deploy อยู่ ซึ่งเป็นสาย Telegram — ไม่ใช่ LINE ตาม source เก่าในดิสก์):
 //   - discovery ใหม่:  GET  /.well-known/agent-card.json   (A2A v1)
 //   - JSON-RPC ใหม่:   POST /a2a/jsonrpc  (SendMessage + x-a2a-key + A2A-Version: 1.0)
 //   - legacy คงไว้:    GET  /.well-known/agent.json, POST / (message/send),
-//                      POST /tasks/get, POST /approvals/resolve
+//                      POST /health, POST /tasks/get, POST /approvals/resolve
 //     (claw-brain เรียกผ่าน Service Binding ด้วย message/send และ n8n ยิง /approvals/resolve)
-//   - fail-closed:     ไม่เจอ policy → MANUAL_REVIEW (เดิม fail-open เป็น PASS)
+//   - fail-closed:     ไม่เจอ policy → MANUAL_REVIEW (live เดิม fail-open เป็น PASS)
+//   - GUARDIAN_APPROVER_UID เป็น optional-strict: ตั้ง secret เมื่อไหร่ resolve ต้องส่ง
+//     requester_uid ตรงเท่านั้น; ไม่ตั้ง = พฤติกรรม live เดิม (n8n ไม่ส่ง uid ก็ resolve ได้)
 
 import {
   A2A_VERSION_HEADER,
@@ -37,8 +40,9 @@ export interface Env {
   AGENT_SKILL_ID: string;
   AGENT_URL?: string;
   A2A_SHARED_KEY?: string;
-  FRICLAWD_LINE_TOKEN: string;
-  GUARDIAN_APPROVER_UID: string;
+  TG_BOT_TOKEN: string;
+  TG_CHAT_ID: string;
+  GUARDIAN_APPROVER_UID?: string;
 }
 
 const PROTOCOL_VERSION = "1.0";
@@ -65,7 +69,7 @@ export function buildAgentCard(env: AgentIdentity, origin: string): AgentCard {
   return {
     name: env.AGENT_NAME || "Guardian Agent",
     description:
-      "Open Claw HITL gate — ตรวจ policy + ขอ approve ผ่าน LINE ก่อนงาน irreversible",
+      "Open Claw HITL gate — ตรวจ policy + ขอ approve ผ่าน Telegram ก่อนงาน irreversible",
     supportedInterfaces: [
       {
         url: interfaceUrl,
@@ -104,7 +108,7 @@ export function buildAgentCard(env: AgentIdentity, origin: string): AgentCard {
         id: env.AGENT_SKILL_ID || "guardian_policy_check",
         name: "Guardian Policy Check",
         description:
-          "ตรวจ action เทียบ policy — เสี่ยงสูงขอ approve ผ่าน LINE, ไม่เจอ policy = MANUAL_REVIEW (fail-closed)",
+          "ตรวจ action เทียบ policy — เสี่ยงสูงขอ approve ผ่าน Telegram, ไม่เจอ policy = MANUAL_REVIEW (fail-closed)",
         tags: ["guardian", "policy", "hitl", "approval"],
         examples: ["deploy worker X", "delete table Y", "broadcast message Z"],
         inputModes: ["application/json"],
@@ -123,7 +127,7 @@ export function buildLegacyAgentCard(env: AgentIdentity, origin: string) {
   return {
     name: env.AGENT_NAME || "Guardian Agent",
     description:
-      "Open Claw HITL gate — ตรวจ policy + ขอ approve ผ่าน LINE ก่อนงาน irreversible",
+      "Open Claw HITL gate — ตรวจ policy + ขอ approve ผ่าน Telegram ก่อนงาน irreversible",
     version: "2.0.0",
     supportedInterfaces: [
       { url, protocolBinding: "JSONRPC", protocolVersion: "1.0" },
@@ -135,7 +139,7 @@ export function buildLegacyAgentCard(env: AgentIdentity, origin: string) {
         id: env.AGENT_SKILL_ID || "guardian_policy_check",
         name: "Guardian Policy Check",
         description:
-          "ตรวจสถานะ action เทียบ policy — เสี่ยงสูงขอ approve ผ่าน LINE ก่อนปล่อยผ่าน",
+          "ตรวจสถานะ action เทียบ policy — เสี่ยงสูงขอ approve ผ่าน Telegram ก่อนปล่อยผ่าน",
         tags: ["guardian", "policy", "hitl", "approval"],
         examples: ["deploy worker X", "delete table Y", "broadcast message Z"],
       },
@@ -211,34 +215,44 @@ async function logTask(
   }
 }
 
-// ── LINE push approval request ──
-async function pushLineApprovalRequest(
+// ── Telegram push approval request (พฤติกรรมเดียวกับ live) ──
+async function pushTelegramApproval(
   env: Env,
   action: string,
   approvalId: string,
+  requestedBy: string,
+  riskLevel: string,
 ) {
-  const res = await fetch("https://api.line.me/v2/bot/message/push", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.FRICLAWD_LINE_TOKEN}`,
+  if (!env.TG_BOT_TOKEN) throw new Error("TG_BOT_TOKEN not set");
+  const text =
+    `🛡️ *Guardian ขออนุมัติ*\n\n` +
+    `Action: \`${action}\`\n` +
+    `Requested by: ${requestedBy}\n` +
+    `Risk: *${riskLevel}*\n` +
+    `ID: \`${approvalId}\`\n\n` +
+    `ตอบ:\n✅ \`approve ${approvalId}\`\n❌ \`reject ${approvalId}\``;
+  const res = await fetch(
+    `https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: env.TG_CHAT_ID,
+        text,
+        parse_mode: "Markdown",
+      }),
     },
-    body: JSON.stringify({
-      to: env.GUARDIAN_APPROVER_UID,
-      messages: [
-        {
-          type: "text",
-          text: `🛡️ Guardian ขออนุมัติ\nAction: ${action}\nID: ${approvalId}\n\nพิมพ์:\n✅ approve ${approvalId}\n❌ reject ${approvalId}`,
-        },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error("line push failed: " + res.status);
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Telegram API ${res.status}: ${body}`);
+  }
 }
 
 // ── Guardian skill logic (ใช้ร่วมทั้ง legacy และ v1 path) ──
 export interface GuardianVerdict {
-  verdict: "PASS" | "BLOCKED" | "PENDING_APPROVAL" | "MANUAL_REVIEW";
+  verdict: "PASS" | "FAIL" | "BLOCKED" | "PENDING_APPROVAL" | "MANUAL_REVIEW";
+  action?: string;
   risk_level?: string;
   reason?: string;
   approval_id?: string;
@@ -250,14 +264,17 @@ export async function runGuardianSkill(
   input: Record<string, unknown>,
   env: Env,
 ): Promise<GuardianVerdict> {
-  const action = String(input.action ?? "").trim();
+  const action = String(input.action ?? "")
+    .toLowerCase()
+    .trim();
+  const requestedBy = String(input.requested_by ?? "unknown");
 
-  // fail-closed: ไม่มี action มาเลย → ให้คนตรวจ ไม่ปล่อยผ่าน
+  // ไม่มี action = คำขอผิดรูป → FAIL (พฤติกรรมเดียวกับ live)
   if (!action) {
     return {
-      verdict: "MANUAL_REVIEW",
-      reason: "missing_action",
-      approval_needed: true,
+      verdict: "FAIL",
+      reason: "missing 'action' field",
+      approval_needed: false,
     };
   }
 
@@ -268,11 +285,12 @@ export async function runGuardianSkill(
     .bind(action)
     .first<{ risk_level: string; requires_approval: number }>();
 
-  // fail-closed: ไม่เจอ policy → MANUAL_REVIEW (เดิม fail-open เป็น PASS — รูรั่วที่ audit เจอ)
+  // fail-closed: ไม่เจอ policy → MANUAL_REVIEW (live เดิม fail-open เป็น PASS — รูรั่วที่ audit เจอ)
   if (!policy) {
     return {
       verdict: "MANUAL_REVIEW",
       reason: "no_matching_policy",
+      action,
       approval_needed: true,
     };
   }
@@ -282,31 +300,35 @@ export async function runGuardianSkill(
     return {
       verdict: "PASS",
       risk_level: policy.risk_level,
+      action,
       approval_needed: false,
     };
   }
 
-  // HIGH risk → สร้าง pending approval + ยิง LINE
+  // HIGH risk → สร้าง pending approval + ยิง Telegram
   const approvalId = "appr_" + crypto.randomUUID().slice(0, 8);
   await env.DB.prepare(
     "INSERT INTO pending_approvals (id, action, requested_by, status, created_at) VALUES (?,?,?,?,?)",
   )
-    .bind(
-      approvalId,
-      action,
-      String(input.requested_by ?? "unknown"),
-      "pending",
-      new Date().toISOString(),
-    )
+    .bind(approvalId, action, requestedBy, "pending", new Date().toISOString())
     .run();
 
   try {
-    await pushLineApprovalRequest(env, action, approvalId);
+    await pushTelegramApproval(
+      env,
+      action,
+      approvalId,
+      requestedBy,
+      policy.risk_level,
+    );
   } catch (e) {
-    // fail-closed: ส่ง LINE ไม่ได้ → BLOCKED ทันที ไม่ปล่อยผ่าน
+    // fail-closed: ส่ง Telegram ไม่ได้ → ลบ pending ทิ้ง + BLOCKED ทันที ไม่ปล่อยผ่าน
+    await env.DB.prepare("DELETE FROM pending_approvals WHERE id = ?")
+      .bind(approvalId)
+      .run();
     return {
       verdict: "BLOCKED",
-      reason: "line_push_failed",
+      reason: "telegram_push_failed: " + String(e),
       approval_id: approvalId,
       approval_needed: true,
     };
@@ -316,6 +338,7 @@ export async function runGuardianSkill(
     verdict: "PENDING_APPROVAL",
     approval_id: approvalId,
     risk_level: policy.risk_level,
+    action,
     approval_needed: true,
     poll_hint: "POST /tasks/get { approval_id } เพื่อเช็คสถานะ",
   };
@@ -487,6 +510,19 @@ export default {
       });
     }
 
+    // ── /health — monitoring probe (พฤติกรรมเดียวกับ live) ──
+    if (url.pathname === "/health") {
+      return Response.json(
+        {
+          ok: true,
+          agent: env.AGENT_NAME,
+          version: "2.0.0",
+          ts: new Date().toISOString(),
+        },
+        { headers: CORS },
+      );
+    }
+
     // ── A2A v1: JSON-RPC ผ่าน official SDK ──
     if (req.method === "POST" && url.pathname === JSON_RPC_PATH) {
       if (
@@ -543,8 +579,9 @@ export default {
       try {
         const result = await runGuardianSkill(input, env);
         await logTask(env, env.AGENT_SKILL_ID, result, true);
+        const isPending = result.verdict === "PENDING_APPROVAL";
         return rpcResult(body.id, {
-          task: { state: "completed" },
+          task: { state: isPending ? "working" : "completed" },
           parts: [{ kind: "data", data: result }],
         });
       } catch (e: any) {
@@ -564,28 +601,45 @@ export default {
           { status: 400, headers: CORS },
         );
       }
+      const approvalId = String(body?.approval_id ?? "");
+      if (!approvalId) {
+        return Response.json(
+          { error: "missing approval_id" },
+          { status: 400, headers: CORS },
+        );
+      }
       const row = await env.DB.prepare(
         "SELECT status FROM pending_approvals WHERE id = ?",
       )
-        .bind(body.approval_id)
+        .bind(approvalId)
         .first<{ status: string }>();
 
+      if (!row) {
+        return Response.json(
+          { error: "not found" },
+          { status: 404, headers: CORS },
+        );
+      }
+
+      const state =
+        row.status === "approved"
+          ? "completed"
+          : row.status === "rejected"
+            ? "failed"
+            : "working";
       return Response.json(
-        {
-          state:
-            row?.status === "approved"
-              ? "completed"
-              : row?.status === "rejected"
-                ? "failed"
-                : "working",
-        },
+        { state, status: row.status, approval_id: approvalId },
         { headers: CORS },
       );
     }
 
     // ── /approvals/resolve — n8n ส่งผล approve/reject ──
     if (req.method === "POST" && url.pathname === "/approvals/resolve") {
-      if (req.headers.get("x-a2a-key") !== env.A2A_SHARED_KEY) {
+      // key semantics เดียวกับ live: ตั้ง key เมื่อไหร่ต้องตรง, ไม่ตั้ง = เปิด
+      if (
+        env.A2A_SHARED_KEY &&
+        req.headers.get("x-a2a-key") !== env.A2A_SHARED_KEY
+      ) {
         return Response.json(
           { ok: false, error: "unauthorized" },
           { status: 401, headers: CORS },
@@ -604,7 +658,12 @@ export default {
 
       const { approval_id, status, requester_uid, reason } = body;
 
-      if (requester_uid !== env.GUARDIAN_APPROVER_UID) {
+      // optional-strict: ตั้ง GUARDIAN_APPROVER_UID เมื่อไหร่ requester_uid ต้องตรง
+      // ไม่ตั้ง = พฤติกรรม live เดิม (n8n resolve ได้ด้วย shared key อย่างเดียว)
+      if (
+        env.GUARDIAN_APPROVER_UID &&
+        requester_uid !== env.GUARDIAN_APPROVER_UID
+      ) {
         return Response.json(
           { ok: false, error: "not authorized approver" },
           { headers: CORS },
@@ -638,12 +697,33 @@ export default {
         true,
       );
 
+      // แจ้งผลกลับเข้า Telegram (best-effort — ล้มไม่ทำให้ resolve fail)
+      try {
+        const emoji = status === "approved" ? "✅" : "❌";
+        await fetch(
+          `https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: env.TG_CHAT_ID,
+              text: `${emoji} *${String(status).toUpperCase()}* \`${approval_id}\`${
+                reason ? `\nเหตุผล: ${reason}` : ""
+              }`,
+              parse_mode: "Markdown",
+            }),
+          },
+        );
+      } catch (_) {
+        // notify ล้มไม่กระทบผล resolve
+      }
+
       return Response.json(
         { ok: true, approval_id, status },
         { headers: CORS },
       );
     }
 
-    return new Response("claw-guardian alive 🛡️", { headers: CORS });
+    return new Response("claw-guardian A2A agent alive 🛡️", { headers: CORS });
   },
 } satisfies ExportedHandler<Env>;

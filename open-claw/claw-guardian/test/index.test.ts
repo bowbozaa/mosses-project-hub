@@ -10,8 +10,8 @@ import {
   taskStateForVerdict,
 } from "../src/index";
 
-// LINE outbound ถูกดักใน vitest.config.ts (outboundService):
-// ปกติตอบ 200, ถ้า action มี __LINE_FAIL__ ตอบ 500 เพื่อจำลอง LINE ล่ม
+// Telegram outbound ถูกดักใน vitest.config.ts (outboundService):
+// ปกติตอบ 200, ถ้า action มี __fail_push__ ตอบ 500 เพื่อจำลอง Telegram ล่ม
 
 const V1_HEADERS = {
   "Content-Type": "application/json",
@@ -117,19 +117,26 @@ describe("guardian skill (fail-closed policy)", () => {
     expect(verdict.approval_needed).toBe(true);
   });
 
-  it("fails closed to MANUAL_REVIEW when action is missing", async () => {
+  it("fails a malformed request with no action (live behavior)", async () => {
     const verdict = await runGuardianSkill({}, env as any);
-    expect(verdict.verdict).toBe("MANUAL_REVIEW");
-    expect(verdict.reason).toBe("missing_action");
+    expect(verdict.verdict).toBe("FAIL");
+    expect(verdict.reason).toBe("missing 'action' field");
   });
 
-  it("blocks when the LINE approval push fails", async () => {
+  it("blocks and cleans up the pending row when the Telegram push fails", async () => {
     const verdict = await runGuardianSkill(
-      { action: "deploy __LINE_FAIL__ worker", requested_by: "test" },
+      { action: "deploy __fail_push__ worker", requested_by: "test" },
       env as any,
     );
     expect(verdict.verdict).toBe("BLOCKED");
-    expect(verdict.reason).toBe("line_push_failed");
+    expect(verdict.reason).toContain("telegram_push_failed");
+    // pending row ต้องถูกลบทิ้ง (fail-closed cleanup)
+    const row = await env.DB.prepare(
+      "SELECT id FROM pending_approvals WHERE id = ?",
+    )
+      .bind(verdict.approval_id)
+      .first();
+    expect(row).toBeNull();
   });
 });
 

@@ -8,7 +8,8 @@ declare global {
       AGENT_NAME: string;
       AGENT_SKILL_ID: string;
       A2A_SHARED_KEY: string;
-      FRICLAWD_LINE_TOKEN: string;
+      TG_BOT_TOKEN: string;
+      TG_CHAT_ID: string;
       GUARDIAN_APPROVER_UID: string;
     }
   }
