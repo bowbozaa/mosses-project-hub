@@ -11,3 +11,27 @@ node_modules/
 *.pem
 credentials.json
 serviceAccountKey.json
+
+# Logs
+*.log
+*.pid
+*.raw.log
+logs/
+
+# Secrets
+*.secret
+google-service-account.json
+
+# Temp files
+*.last.txt
+*.last-hash
+*.tmp
+
+# Agent runtime
+.agents/*/logs/
+status.json
+transcript.md
+
+# OS
+Thumbs.db
+.DS_Store
