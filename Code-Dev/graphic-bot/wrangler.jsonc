@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "graphic-bot",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+
+  // FLUX.2 klein + llama vision เรียกผ่าน binding ตรง ๆ ไม่ต้องถือ API token ใน worker
+  "ai": { "binding": "AI" },
+  // ย่อรูปอ้างอิงให้เล็กกว่า 512px ก่อนส่งเข้า klein (ฟรี 5,000 ครั้ง/เดือน) — โค้ดมี fallback ถ้า binding ใช้ไม่ได้
+  "images": { "binding": "IMG" },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "graphic-jobs",
+      "database_id": "916c23b8-e5ca-4eb2-90cd-9c4a0056f93d",
+    },
+  ],
+
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "graphic-bot-images" }],
+
+  "vars": {
+    // โควตาฟรีทั้งบัญชี ~130 รูป/วัน — จำกัดรายคนกันคนเดียวใช้หมดของทีม
+    "DAILY_QUOTA": "15",
+    "ADMIN_ID": "8507886955",
+    // klein เรียกผ่าน REST (secret CF_AI_TOKEN) — binding multipart เคยค้าง
+    "CF_ACCOUNT_ID": "c8a673351898eed482ae6f410e4aa118",
+    "PUBLIC_BASE_URL": "https://graphic-bot.banknakorn39.workers.dev",
+  },
+}
