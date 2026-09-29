@@ -7,3 +7,11 @@ minimumReleaseAgeExclude:
   - miniflare@4.20260710.0
   - wrangler@4.111.0
   - '@cloudflare/vitest-pool-workers@0.18.5'
+# Security: force patched transitive deps pulled in by wrangler/miniflare/vite
+# (dev/test tooling only). Selectors match vulnerable ranges only, so these
+# no-op once upstream pins move past them.
+overrides:
+  undici@>=7.0.0 <7.29.1: ^7.29.1
+  sharp@<0.35.4: ^0.35.4
+  nanoid@<3.3.18: ^3.3.18
+  postcss@<8.5.23: ^8.5.23
