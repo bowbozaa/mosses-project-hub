@@ -41,6 +41,8 @@ tools/ai-migration/
 │   ├── 09-Test-WindowsRestore.ps1      Phase 28  (รันบน friclawd)
 │   ├── 10-New-FinalReport.ps1          Phase 41-43, 46  (Hard Gate)
 │   ├── Run-All.ps1                     รัน 00→10 ในคำสั่งเดียว
+│   ├── 11-Plan-CloudflareMigration.ps1 แผนย้ายแอปไป Cloudflare (ไม่ deploy)
+│   ├── Install-DesktopShortcut.ps1     ไอคอนบนเดสก์ท็อป
 │   ├── bootstrap-windows.ps1 / restore-projects-windows.ps1 / restore-config-windows.ps1 / verify-environment-windows.ps1
 └── macos/
     ├── pull-backup-from-smb.sh         Phase 31  (backup ชุดที่ 2 + shasum -c)
@@ -57,6 +59,31 @@ tools/ai-migration/
 4. ถ้า Windows บล็อกไม่ให้รันสคริปต์: `Set-ExecutionPolicy -Scope Process Bypass` (มีผลเฉพาะหน้าต่าง PowerShell นั้น)
 5. บน friclawd: เตรียม SMB share ไว้เป็นปลายทาง เช่น `\\100.127.194.73\Backup` แล้วเช็กพื้นที่ว่าง
 6. เช็กว่าโปรเจกต์ไม่ได้อยู่ใน OneDrive แบบ Files On-Demand (ไฟล์ที่ยังไม่ได้ดาวน์โหลดลงเครื่องจะไม่ถูก copy)
+
+## ไอคอนบนเดสก์ท็อป (ดับเบิลคลิกเพื่อรัน)
+
+รันครั้งเดียวเพื่อสร้างไอคอน (ไม่ต้องใช้สิทธิ์ Admin):
+
+```powershell
+pwsh -File .\Install-DesktopShortcut.ps1 -DestinationRoot '\\100.127.194.73\Backup\Mosses-AI-Migration'
+```
+
+จะได้ไอคอน 2 อันบนเดสก์ท็อป:
+
+- **AI Migration - Test (Dry Run)** — ดูว่าจะ copy อะไรบ้าง โดยยังไม่ copy จริง
+- **AI Migration - Run** — รันจริง (copy อย่างเดียว ถามยืนยันก่อน copy และถาม passphrase)
+
+หน้าต่างจะค้างเปิดไว้หลังรันเสร็จ เพื่อให้อ่านตารางสรุปได้ ถ้าต้องการเปลี่ยนปลายทาง ให้รันคำสั่งเดิมอีกครั้งพร้อม `-Force`
+
+## แผนย้ายแอปไป Cloudflare (`11-Plan-CloudflareMigration.ps1`)
+
+สคริปต์นี้จะเทียบทุกโปรเจกต์ที่เจอในโน้ตบุ๊กกับรายชื่อ Worker ที่ deploy อยู่จริง (`data/cloudflare-snapshot.json` — มี 56 Workers / 13 D1 / 14 R2 ณ 2026-09-29) แล้วสร้างรายงาน `00_REPORTS\CLOUDFLARE-MIGRATION-PLAN.md`
+- **อยู่บน Cloudflare แล้ว** — แต่ถ้าโค้ดในเครื่องยังไม่ได้ push จะเตือน
+- **พร้อม deploy** / **เว็บ static** / **ต้องใช้ adapter ของ framework** / **ต้อง port ไป Hono** / **Python หรือ Docker ต้องพิจารณาเพิ่ม**
+- **ไม่เหมาะกับ Cloudflare** เช่น n8n, Ollama และเครื่องมือบนเดสก์ท็อปอย่าง Claude Code, VS Code ที่ต้องติดตั้งใหม่บน friclawd หรือ Mac
+- **Worker ที่ deploy แล้วแต่ไม่เจอโปรเจกต์ในเครื่อง** — ต้องเช็กว่ามีโค้ดอยู่ใน GitHub
+
+สคริปต์นี้**ไม่ deploy อะไรเลย** การ deploy แต่ละโปรเจกต์เป็นการแก้ระบบ production จึงต้องได้รับอนุมัติเป็นรายตัว `Run-All.ps1` จะเรียกสคริปต์นี้ให้อัตโนมัติ
 
 ## ทางลัด: รันครบในคำสั่งเดียว (`Run-All.ps1`)
 

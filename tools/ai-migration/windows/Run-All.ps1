@@ -73,6 +73,7 @@ try {
     Invoke-Step 'Phase 2  projects' '02-Discover-Projects.ps1'      @{ WorkspaceRoot = $WorkspaceRoot } -Critical | Out-Null
     Invoke-Step 'Phase 3  config'   '03-Discover-Config.ps1'        @{ WorkspaceRoot = $WorkspaceRoot } -Critical | Out-Null
     Invoke-Step 'Phase 4  services' '04-Discover-Services.ps1'      @{ WorkspaceRoot = $WorkspaceRoot } | Out-Null
+    Invoke-Step 'Cloudflare plan'   '11-Plan-CloudflareMigration.ps1' @{ WorkspaceRoot = $WorkspaceRoot } | Out-Null
 
     # --- 2. Confirm copy sources (the one decision that needs a human) ---
     $srcFile = Join-Path $ws.Manifests 'migration-sources.json'
