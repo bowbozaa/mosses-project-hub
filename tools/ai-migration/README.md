@@ -40,6 +40,7 @@ tools/ai-migration/
 │   ├── 08-Backup-Secrets-Encrypted.ps1 Phase 11-12  (Mosses ต้องรันเอง)
 │   ├── 09-Test-WindowsRestore.ps1      Phase 28  (รันบน friclawd)
 │   ├── 10-New-FinalReport.ps1          Phase 41-43, 46  (Hard Gate)
+│   ├── Run-All.ps1                     รัน 00→10 ในคำสั่งเดียว
 │   ├── bootstrap-windows.ps1 / restore-projects-windows.ps1 / restore-config-windows.ps1 / verify-environment-windows.ps1
 └── macos/
     ├── pull-backup-from-smb.sh         Phase 31  (backup ชุดที่ 2 + shasum -c)
@@ -57,7 +58,28 @@ tools/ai-migration/
 5. บน friclawd: เตรียม SMB share ไว้เป็นปลายทาง เช่น `\\100.127.194.73\Backup` แล้วเช็กพื้นที่ว่าง
 6. เช็กว่าโปรเจกต์ไม่ได้อยู่ใน OneDrive แบบ Files On-Demand (ไฟล์ที่ยังไม่ได้ดาวน์โหลดลงเครื่องจะไม่ถูก copy)
 
-## ลำดับการรัน
+## ทางลัด: รันครบในคำสั่งเดียว (`Run-All.ps1`)
+
+รันเองในหน้าต่าง PowerShell ปกติบนโน้ตบุ๊ก (**ไม่ต้อง**เปิดแบบ Admin):
+
+```powershell
+cd <repo>\tools\ai-migration\windows
+pwsh -File .\Run-All.ps1 -DestinationRoot '\\100.127.194.73\Backup\Mosses-AI-Migration' -DryRun   # ลองก่อน ยังไม่ copy อะไร
+pwsh -File .\Run-All.ps1 -DestinationRoot '\\100.127.194.73\Backup\Mosses-AI-Migration'           # รันจริง
+```
+
+สคริปต์จะรัน 00 → 05 → 06 → 07 → 08 → 10 ต่อกันจนจบ และหยุดถามแค่ 2 จุด:
+
+1. **ยืนยันรายการโฟลเดอร์ที่จะ copy** — ตอบ `y` เพื่อไปต่อ หรือ `n` เพื่อหยุด (ถ้าอยากแก้รายการ ให้แก้ `migration-sources.json` ก่อนตอบ)
+2. **ตั้ง passphrase ให้ secret archive** — ต้องพิมพ์เอง แล้วจดใส่ password manager ทันที
+
+ถ้าขั้นตอนสำคัญขั้นไหนล้มเหลว สคริปต์จะหยุดตรงนั้นทันที ขั้นที่เหลือไม่ถูกรัน ตอนจบจะแสดงตารางสรุป และบันทึก log ไว้ที่ `02_LOGS\run-all-*.log`
+
+ตัวเลือกเพิ่มเติม: `-ExportBrainD1` (สำรอง D1 ของ Brain), `-Resume` (copy ต่อจากรอบที่แล้ว), `-SkipSecrets`, `-AutoApproveSources`
+
+ส่วนที่ต้องทำบนเครื่องอื่น (friclawd, Mac) ยังต้องรันแยกตามตารางด้านล่าง
+
+## ลำดับการรัน (ทีละขั้น)
 
 | # | สคริปต์ | ใครรัน | รันที่เครื่อง |
 |---|---|---|---|
