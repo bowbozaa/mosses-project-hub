@@ -189,7 +189,7 @@ foreach ($prof in @($PROFILE.CurrentUserAllHosts, $PROFILE.CurrentUserCurrentHos
 }
 $scanRoots = @($projects | ForEach-Object { $_.'Absolute Path' }) + @((Join-Path $up '.claude'), (Join-Path $up '.n8n'), (Join-Path $up '.cursor'))
 foreach ($r in ($scanRoots | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique)) {
-    foreach ($f in (Get-BackupFileList -Root $r -IncludeSecrets | Where-Object { Test-IsSecretFileName (Split-Path $_.FullName -Leaf) })) {
+    foreach ($f in (Get-BackupFileList -Root $r -IncludeSecrets | Where-Object { (Test-IsSecretFileName (Split-Path $_.FullName -Leaf)) -or (Test-IsInSecretDir $_.FullName.Substring($r.Length)) })) {
         if (-not $secretFiles.Contains($f.FullName)) { $secretFiles.Add($f.FullName) }
         $leaf = Split-Path $f.FullName -Leaf
         if ($leaf -like '.env*' -or $leaf -eq '.dev.vars') {

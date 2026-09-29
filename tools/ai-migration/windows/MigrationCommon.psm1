@@ -26,6 +26,10 @@ $script:SecretFilePatterns = @(
     'google-service-account.json', '*.secret', '.npmrc', '.pypirc', '.netrc'
 )
 
+# Directories whose whole content is treated as secret (e.g. ~/.claude/secrets/graphic-bot-token.txt):
+# excluded from the plain copy/hash, collected into the encrypted archive by 03/08.
+$script:SecretDirNames = @('secrets', '.secrets')
+
 # Names that never count as secret even if they match a pattern above.
 $script:SecretFileAllowList = @('.env.example', '.env.sample', '.env.template', '.dev.vars.example')
 
@@ -37,6 +41,13 @@ $script:WorkspaceSubdirs = @('00_REPORTS', '01_MANIFESTS', '02_LOGS', '03_SCRIPT
 
 function Get-DefaultExcludeDirs { return $script:DefaultExcludeDirs }
 function Get-SecretFilePatterns { return $script:SecretFilePatterns }
+function Get-SecretDirNames { return $script:SecretDirNames }
+
+function Test-IsInSecretDir {
+    param([Parameter(Mandatory)][string]$Path)
+    foreach ($seg in ($Path -split '[\\/]')) { if ($script:SecretDirNames -contains $seg) { return $true } }
+    return $false
+}
 
 # ---------------------------------------------------------------------------
 # Workspace, logging, status
@@ -234,6 +245,7 @@ function Get-BackupFileList {
             foreach ($d in $dir.EnumerateDirectories()) {
                 if ($d.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { continue }
                 if ($ExcludeDirs -contains $d.Name) { continue }
+                if (-not $IncludeSecrets -and ($script:SecretDirNames -contains $d.Name)) { continue }
                 $stack.Push($d)
             }
         } catch {
@@ -266,4 +278,4 @@ public static extern bool GetDiskFreeSpaceEx(string lpDirectoryName, out ulong l
     return $null
 }
 
-Export-ModuleMember -Function * -Variable DefaultExcludeDirs, SecretFilePatterns
+Export-ModuleMember -Function * -Variable DefaultExcludeDirs, SecretFilePatterns, SecretDirNames

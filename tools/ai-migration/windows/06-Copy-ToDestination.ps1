@@ -111,7 +111,7 @@ foreach ($item in $plan) {
     }
     $safe = ($item.Name -replace '[\\/:*?"<>| ]', '_')
     $itemLog = Join-Path $ws.Logs "copy-$safe.log"
-    $xd = @($excludeDirs + $item.ExtraExcludeDirs)
+    $xd = @($excludeDirs + $item.ExtraExcludeDirs + (Get-SecretDirNames))   # secret dirs go to the encrypted archive (08)
     $rcArgs = @($item.Source, $item.Destination, '/E', '/Z', '/R:2', '/W:5', '/COPY:DAT', '/DCOPY:T', '/XJ', '/FFT', "/MT:$Threads", '/NP', '/NDL', '/NFL', "/UNILOG:$itemLog")
     if ($xd.Count) { $rcArgs += '/XD'; $rcArgs += $xd }
     if ($excludeFiles.Count) { $rcArgs += '/XF'; $rcArgs += $excludeFiles }
@@ -137,7 +137,7 @@ foreach ($item in $plan) {
 }
 
 $rep = Join-Path $ws.Reports 'COPY-REPORT.md'
-$md = "# COPY REPORT`n`nDestination: ``$DestinationRoot``  DryRun: $DryRun  Resume: $Resume`n`nExcluded dirs: $($excludeDirs -join ', ')`n`nExcluded secret files (→ 08 encrypted archive): $($excludeFiles -join ', ')`n`n" +
+$md = "# COPY REPORT`n`nDestination: ``$DestinationRoot``  DryRun: $DryRun  Resume: $Resume`n`nExcluded dirs: $($excludeDirs -join ', ')`n`nExcluded secret files/dirs (→ 08 encrypted archive): $($excludeFiles -join ', '); dirs: $((Get-SecretDirNames) -join ', ')`n`n" +
     (ConvertTo-MarkdownTable -Rows $results.ToArray() -Columns Name, Status, ExitCode, Files, Bytes, Start, End, Source, Destination)
 Set-Content -LiteralPath $rep -Value $md -Encoding UTF8
 $results | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $ws.Manifests 'copy-results.json') -Encoding UTF8
